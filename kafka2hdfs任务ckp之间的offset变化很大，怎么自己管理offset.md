@@ -1,0 +1,1 @@
+kafka2hdfs任务ckp之间的offset变化很大，怎么自己管理offset

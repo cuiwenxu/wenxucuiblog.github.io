@@ -1,0 +1,1 @@
+Spark UI是反映一个Spark作业执行情况的web页面, 用户可以通过Spark UI观察Spark作业的执行状态, 分析可能存在的问题. 本文会介绍Spark UI的相关内容和常用的分析方法, 帮助用户更快看懂Spark究竟是如何执行代码以及通过Spark UI定位常见的作业问题.

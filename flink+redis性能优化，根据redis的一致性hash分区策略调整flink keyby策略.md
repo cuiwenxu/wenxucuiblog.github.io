@@ -1,0 +1,1 @@
+flink+redis性能优化，根据redis的一致性hash分区策略调整flink keyby策略

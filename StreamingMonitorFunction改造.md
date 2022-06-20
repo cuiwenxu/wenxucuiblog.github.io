@@ -1,0 +1,15 @@
+当前iceberg 增量读只能读operation=append的snapshot，如果想要读取overwrite类型，需要对其进行改造。
+首先来看一个调用关系
+StreamingMonitorFunction.monitorAndForwardSplits 
+FlinkSplitGenerator.createInputSplits
+FlinkSplitGenerator.tasks
+BaseTableScan.planTasks
+IncrementalDataTableScan.planFiles
+IncrementalDataTableScan.snapshotsWithin
+ManifestGroup.planFiles
+
+
+
+
+
+

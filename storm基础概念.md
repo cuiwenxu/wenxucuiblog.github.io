@@ -1,0 +1,43 @@
+## stream
+stream是Storm的核心抽象。stream是以分布式方式并行处理和创建的无限元组序列。定义stream时必须指定schema，schema中声明了元组中的字段。默认情况下，元组可以包含int、long、short、byte、string、double、float、boolean和byte array。您还可以定义自己的序列化器，以便自定义类型可以在元组中使用。
+
+每个stream在声明时都有一个id。由于单流spout和bolt很常见，所以OutputFieldsDeclarer专门提供特定方法来声明单个流而不指定id。在本例中，流的默认id为“default”。
+
+## spout
+spout是拓扑中的数据源头。通常，spouts将从外部源读取元组，并将它们发送到拓扑中。spout可以是可靠的，也可以是不可靠的。如果一个tuple没有被Storm处理，一个可靠的spout能够重放它，而一个不可靠的spout会在tuple发出后立刻忘记它。
+
+spout可以发出不止一股stream。为此，使用OutputFieldsDeclarer的declareStream方法声明多个流，并在使用SpoutOutputCollector上的emit方法指定要发出的流。
+
+spouts的主要方法是nextTuple。nextTuple要么向拓扑中发送一个新的元组，要么在没有新元组需要发送时直接返回。nextTuple必须不阻塞任何spout实现，因为Storm在同一个线程上调用所有的spout方法。
+
+在spout上的其他主要方法是ack和fail。当Storm检测到从spout发出的tuple通过拓扑处理成功完成或失败时，就会调用它们。只有可靠的spout才需要确认和失败。更多信息请参见Javadoc。
+
+## bolt
+拓扑中的所有处理都是在bolt中完成的。bolt可以做任何事情，包括过滤、自定义函数、聚合、连接、访问数据库等等。
+
+bolt可以发射多个流。为此，使用OutputFieldsDeclarer的declareStream方法声明多个流，并在使用OutputCollector上的emit方法时指定要发出的流。
+
+bolt中的主要方法是execute方法，它将一个新的元组作为输入。bolt使用OutputCollector对象产生新的元组。bolt必须为其处理的每个元组调用OutputCollector上的ack方法，以便Storm知道元组何时完成(并最终确定确认原始spout元组是否安全)。对于处理一个输入元组，根据这个元组发出0个或多个元组，然后对输入元组进行ack的常见情况，Storm提供了一个IBasicBolt接口来自动打包。
+
+在bolt中启动异步处理的新线程是非常好的。OutputCollector是线程安全的，可以在任何时候调用。
+## 流分组
+定义拓扑的一部分是为每个bolt指定它应该接收哪些流作为输入。流分组定义了该流应该如何在bolt的任务中进行划分。
+在Storm中有8个内置的流分组，你可以通过实现CustomStreamGrouping接口来实现自定义流分组:
+- 随机分组：元组随机分布在bolt的任务中，保证每个bolt得到相同数量的元组。
+- 字段分组：按分组中指定的字段对流进行分区。例如，如果流是按"user-id"字段分组的，那么具有相同"user-id"的元组总是会转到相同的任务，但具有不同"user-id"的元组可能转到不同的任务。
+- Partial Key分组：流由分组中指定的字段进行分区，就像按字段分组一样，但区别在两个下游bolt之间进行负载均衡，这在传入数据倾斜时提供更好的资源利用。
+- 所有分组：流被复制到所有bolt的任务中。小心使用这个分组。
+全局分组:整个流进入bolt的单个任务。具体来说，它会转到id最低的任务。
+无分组:此分组指定您不关心流是如何分组的。目前，none groups等同于shuffle groups。最终，Storm会在订阅的bolt或spout中推送没有分组的bolt。
+直接分组:这是一种特殊的分组。以这种方式分组的流意味着元组的生产者决定消费者的哪个任务将接收这个元组。直接分组只能在已声明为直接流的流上声明。发送到直接流的元组必须使用[emitDirect](javadocs/org/apache/storm/task/OutputCollector.html#emitDirect(int, int, java.util.List)方法之一发送。bolt可以通过使用提供的TopologyContext或跟踪OutputCollector中的emit方法的输出(该方法返回元组被发送到的任务id)来获取其消费者的任务id。
+局部分组或随机分组:如果目标螺栓在同一个工作进程中有一个或多个任务，元组将被随机分组为那些进程内的任务。否则，这就像一个正常的shuffle分组。
+资源:
+
+TopologyBuilder:使用这个类来定义拓扑
+InputDeclarer:当setBolt在TopologyBuilder上被调用时，这个对象就会被返回，它被用来声明bolt的输入流以及这些流应该如何分组
+可靠性
+Storm保证每个spout元组都将被拓扑完全处理。它通过跟踪由每个spout元组触发的元组树并确定该元组树何时已成功完成来实现这一点。每个拓扑都有一个与之关联的“消息超时”。如果Storm没有检测到一个spout元组在这个超时时间内已经完成了，那么它就会失败这个元组，然后再重放它。
+
+为了充分利用Storm的可靠性，你必须告诉Storm什么时候在元组树中创建新的边缘，什么时候你完成了单个元组的处理。这些是通过使用OutputCollector对象来完成的，该对象用于发出元组。锚定是在emit方法中完成的，您可以使用ack方法声明您已经完成了一个元组。
+
+这在保证消息处理中有更详细的解释。
